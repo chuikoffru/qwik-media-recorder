@@ -1,0 +1,15 @@
+.dynamic {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.dynamic div {
+  display: inline-block;
+  width: 3px;
+  height: 35px;
+  margin: 0 5px;
+  background: #fcd109;
+  transform: scaleY(0.5);
+  opacity: 0.25;
+}
