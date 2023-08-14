@@ -5,6 +5,8 @@ It allows users to record audio from their device's microphone.
 
 Also, it displays a recording indicator and provides a simple UI to stop/pause recording.
 
+[![Publish to NPM](https://github.com/chuikoffru/qwik-media-recorder/actions/workflows/npm-publish.yml/badge.svg)](https://github.com/chuikoffru/qwik-media-recorder/actions/workflows/npm-publish.yml)
+
 ## How to use it?
 
 ```
