@@ -51,3 +51,22 @@ export default component$(() => {
   );
 });
 ```
+
+# useSound() hook for Qwik
+
+This hook just play a sound from audiofile.
+
+```
+import { component$ } from "@builder.io/qwik";
+import { useSound } from "qwik-media-recorder";
+import sound from "../assets/sound.mp3";
+
+export const App = component$(() => {
+  const [play] = useSound(sound);
+
+  return (
+    <button onClick$={play}>Play</button>
+  );
+});
+
+```
