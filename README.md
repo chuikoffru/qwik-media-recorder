@@ -62,7 +62,7 @@ import { useSound } from "qwik-media-recorder";
 import sound from "../assets/sound.mp3";
 
 export const App = component$(() => {
-  const [play] = useSound(sound);
+  const { play, stop, isPlaying, time, undo, redo, seek, duration } = useSound(sound);
 
   return (
     <button onClick$={play}>Play</button>
