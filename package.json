@@ -1,6 +1,6 @@
 {
   "name": "qwik-media-recorder",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Qwik hook for record audio from microphone",
   "main": "./lib/index.qwik.mjs",
   "qwik": "./lib/index.qwik.mjs",
@@ -26,7 +26,7 @@
     "lib-types"
   ],
   "engines": {
-    "node": ">=15.0.0"
+    "node": ">=18.0.0"
   },
   "private": false,
   "type": "module",
