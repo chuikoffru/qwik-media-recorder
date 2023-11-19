@@ -23,7 +23,7 @@ export const MediaButton = component$<MediaButtonProps>(
         return (
           <button key="recording" onClick$={onStop}>
             Recording {formattedDuration.value}
-            {analyser.value && <DynamicIcon analyser={analyser.value} />}
+            {analyser && <DynamicIcon analyser={analyser} />}
             Stop
           </button>
         );

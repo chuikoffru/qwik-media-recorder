@@ -1,16 +1,15 @@
-import { type NoSerialize, component$, useSignal, useVisibleTask$ } from "@builder.io/qwik";
-import styles from "./DynamicIcon.module.css";
+import { type NoSerialize, component$, useSignal, useVisibleTask$, Signal } from "@builder.io/qwik";
 
 type DynamicIconProps = {
-  analyser: NoSerialize<AnalyserNode>;
+  analyser: Signal<NoSerialize<AnalyserNode> | null>;
 };
 
 export const DynamicIcon = component$<DynamicIconProps>(({ analyser }) => {
-  const ref = useSignal<HTMLDivElement>();
+  const ref = useSignal<SVGSVGElement>();
 
   useVisibleTask$(({ cleanup }) => {
     if (!ref.value) return;
-    if (!analyser) return;
+    if (!analyser.value) return;
 
     const dataMap: { [key: number]: number } = {
       0: 15,
@@ -31,29 +30,24 @@ export const DynamicIcon = component$<DynamicIconProps>(({ analyser }) => {
       15: 14,
     };
     let raf: number;
-    const bufferLength = analyser.frequencyBinCount;
+    const bufferLength = analyser.value.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
-
-    for (let i = 0; i < bufferLength; ++i) {
-      const elm = document.createElement("div");
-      ref.value.appendChild(elm);
-    }
-
-    const visualElements = ref.value.querySelectorAll("div");
 
     const draw = () => {
       if (!ref.value) return;
-      if (!analyser) return;
-      const values = Object.values(dataArray);
+      if (!analyser.value) return;
 
       raf = requestAnimationFrame(draw);
-      analyser.getByteFrequencyData(dataArray);
+      analyser.value.getByteFrequencyData(dataArray);
+
+      const values = Object.values(dataArray);
+      const bars = ref.value.querySelectorAll(".bar");
 
       for (let i = 0; i < bufferLength; i++) {
         const value = values[dataMap[i]] / 255;
-        const elmStyles = visualElements[i].style;
-        elmStyles.transform = `scaleY( ${value} )`;
-        elmStyles.opacity = `${Math.max(0.25, value)}`;
+        const bar = bars[dataMap[i]];
+        bar.setAttribute("transform", `scale(1, ${value})`);
+        bar.setAttribute("opacity", `${Math.max(0.25, value)}`);
       }
     };
 
@@ -64,5 +58,16 @@ export const DynamicIcon = component$<DynamicIconProps>(({ analyser }) => {
     });
   });
 
-  return <div class={styles.dynamic} ref={ref}></div>;
+  const svgStyles = {
+    width: "100%",
+    height: "100%",
+  };
+
+  return (
+    <svg ref={ref} style={svgStyles}>
+      {[...Array(analyser.value?.frequencyBinCount)].map((_, i) => (
+        <rect class="bar" key={i} x={i * 10} width="8" height="100%" fill="#42a5f5" />
+      ))}
+    </svg>
+  );
 });

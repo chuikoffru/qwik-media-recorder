@@ -4,7 +4,30 @@ declare global {
   interface Window {
     AudioContext: typeof AudioContext;
     webkitAudioContext: typeof AudioContext;
+    SpeechRecognition: new () => SpeechRecognition;
+    webkitSpeechRecognition: new () => SpeechRecognition;
   }
+}
+
+interface SpeechRecognition extends EventTarget {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  start(): void;
+  stop(): void;
+
+  onstart: () => void;
+
+  onresult: (event: SpeechRecognitionEvent) => void;
+
+  onend: () => void;
+
+  // Другие свойства и методы, которые вы хотите использовать
+}
+
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+  resultIndex: number;
 }
 
 export type RecordingStatus = "ready" | "recording" | "stopped" | "denied";
@@ -14,32 +37,50 @@ type HookReturn = {
   stopRecording: QRL<() => void>;
   statusRecording: Signal<RecordingStatus>;
   clearRecording: QRL<() => void>;
-  isPlaying: Signal<boolean>;
-  startPlaying: QRL<(url?: string) => void>;
-  stopPlaying: QRL<() => void>;
   duration: Signal<number>;
   formattedDuration: Readonly<Signal<string>>;
-  analyser: Signal<NoSerialize<AnalyserNode> | null>;
+  analyser: Signal<NoSerialize<AnalyserNode> | null>
   audioBlob: Signal<NoSerialize<Blob> | null>;
+  transcript: Signal<string>;
+  resetTranscript: QRL<() => void>;
 };
+
+type TranscriptOptions = {
+  enable?: boolean;
+  continuous?: boolean;
+  interimResults?: boolean;
+  lang?: string;
+}
 
 type Options = {
   timeLimit?: number;
+  enableAnalyser?: boolean;
+  transcipt?: TranscriptOptions
 };
+
+type UnchangeStore = {
+  mediaRecorder: NoSerialize<MediaRecorder> | null;
+  mediaStream: NoSerialize<MediaStream> | null;
+  audioContext: NoSerialize<AudioContext> | null;
+  sourceNode: NoSerialize<MediaStreamAudioSourceNode> | null;
+  recognizer: NoSerialize<SpeechRecognition> | null;
+}
 
 export const useMediaRecorder = (options?: Options): HookReturn => {
 
   const statusRecording = useSignal<RecordingStatus>("ready");
-  const isPlaying = useSignal<boolean>(false);
-  const mediaRecorder = useSignal<NoSerialize<MediaRecorder> | null>(null);
-  const audioPlayer = useSignal<NoSerialize<HTMLAudioElement> | null>(null);
-  const mediaStream = useSignal<NoSerialize<MediaStream> | null>(null);
-  const audioContext = useSignal<NoSerialize<AudioContext> | null>(null);
-  const analyserNode = useSignal<NoSerialize<AnalyserNode> | null>(null);
-  const sourceNode = useSignal<NoSerialize<MediaStreamAudioSourceNode> | null>(null);
+  const store = useSignal<UnchangeStore>({
+    mediaRecorder: null,
+    mediaStream: null,
+    audioContext: null,
+    sourceNode: null,
+    recognizer: null,
+  });
   const audioUrl = useSignal<string>("");
   const duration = useSignal<number>(0);
   const audioBlob = useSignal<NoSerialize<Blob> | null>(null);
+  const transcript = useSignal<string>("");
+  const analyserNode = useSignal<NoSerialize<AnalyserNode> | null>(null);
 
   const formattedDuration = useComputed$(() => {
     const time = new Date();
@@ -58,8 +99,6 @@ export const useMediaRecorder = (options?: Options): HookReturn => {
       statusRecording.value = "stopped";
       // Записываем url в хранилище
       audioUrl.value = url;
-      // Передаем плеер в хранилище
-      audioPlayer.value = noSerialize(new Audio(url));
       // Передаем данные в колбэк
       audioBlob.value = noSerialize(data);
     })
@@ -76,21 +115,56 @@ export const useMediaRecorder = (options?: Options): HookReturn => {
     try {
       // Получаем аудио с микрофона
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Создаем аудио контекст, источник и анализатор
-      const ac = new (window.AudioContext || window.webkitAudioContext)();
-      const source = ac.createMediaStreamSource(stream);
-      const analyser = ac.createAnalyser();
-      analyser.smoothingTimeConstant = 0.5;
-      analyser.fftSize = 32;
-      source.connect(analyser);
+
       // Передаем стрим в стор
-      mediaStream.value =  noSerialize(stream);
-      // Передаем анализатор в стор
-      analyserNode.value =  noSerialize(analyser);
-      // Передаем источник в стор
-      sourceNode.value =  noSerialize(source);
-      // Передаем контекст в стор
-      audioContext.value =  noSerialize(ac);
+      store.value.mediaStream =  noSerialize(stream);
+
+      // Создаем аудио контекст, источник и анализатор
+      if (options?.enableAnalyser) {
+        const ac = new (window.AudioContext || window.webkitAudioContext)();
+        const source = ac.createMediaStreamSource(stream);
+        const analyser = ac.createAnalyser();
+        analyser.smoothingTimeConstant = 0.5;
+        analyser.fftSize = 32;
+        source.connect(analyser);
+
+        // Передаем анализатор в стор
+        analyserNode.value =  noSerialize(analyser);
+        // Передаем источник в стор
+        store.value.sourceNode =  noSerialize(source);
+        // Передаем контекст в стор
+        store.value.audioContext =  noSerialize(ac);
+      }
+      if (options?.transcipt?.enable) {
+        store.value.recognizer = noSerialize(new (window.webkitSpeechRecognition ||
+          window.SpeechRecognition)());
+    
+        if (!store.value.recognizer) {
+          throw new Error('SpeechRecognition API is not supported in this browser.');
+        }
+    
+        store.value.recognizer.lang = options.transcipt.lang || 'en-US';
+        store.value.recognizer.continuous = options.transcipt.continuous ?? true
+        store.value.recognizer.interimResults = options.transcipt.interimResults ?? false
+    
+        store.value.recognizer.onstart = (): void => {
+          // setIsListening(true);
+        };
+    
+        store.value.recognizer.onresult = (event: SpeechRecognitionEvent): void => {
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const text = event.results[i][0].transcript;
+            transcript.value += text;
+          }
+        };
+    
+        store.value.recognizer.onend = (): void => {
+          // setIsListening(false);
+        };
+    
+        store.value.recognizer.start();
+      }
+
       // Передаем поток в рекордер
       const recorder = new MediaRecorder(stream);
       // Стартуем запись
@@ -98,7 +172,7 @@ export const useMediaRecorder = (options?: Options): HookReturn => {
       // Навешиваем обработчик доступности данных
       recorder.ondataavailable = finishRecording;
       // Передаем рекордер в стор
-      mediaRecorder.value =  noSerialize(recorder);
+      store.value.mediaRecorder =  noSerialize(recorder);
       // Меняем статус на активный
       statusRecording.value =  "recording";
     } catch (error) {
@@ -107,65 +181,48 @@ export const useMediaRecorder = (options?: Options): HookReturn => {
     }
   });
 
+  const resetTranscript = $(() => {
+    transcript.value = "";
+  });
+
   /**
    * Остановить запись
    */
   const stopRecording = $(() => {
-    if (!mediaRecorder.value) return;
+    if (!store.value.mediaRecorder) return;
     console.log(`stopRecording`);
       // Меняем статус
-      statusRecording.value =  "stopped";
+      statusRecording.value = "stopped";
       // Останавливаем запись
-      mediaRecorder.value.stop();
+      store.value.mediaRecorder.stop();
       // Отключаем стрим
-      mediaStream.value?.getTracks().forEach((track) => track.stop());
+      store.value.mediaStream?.getTracks().forEach((track) => track.stop());
       // Удаляем стрим из хранилища
-      mediaStream.value =  null;
+      store.value.mediaStream =  null;
       // Удаляем анализатор из стора
       analyserNode.value =  null;
+      // Останавливаем распознавание если оно было
+      store.value.recognizer?.stop();
   });
 
   const clearRecording = $(() => {
     console.log(`clearRecording`);
     // Сбрасываем статус
-    statusRecording.value =  "ready";
+    statusRecording.value = "ready";
     // Сбрасываем длительность
-    duration.value =  0;
+    duration.value = 0;
     // Чистим url
-    audioUrl.value =  "";
+    audioUrl.value = "";
     // Удаляем рекордер из стора
-    mediaRecorder.value =  null;
+    store.value.mediaRecorder = null;
     // Удаляем стрим из хранилища
-    mediaStream.value =  null;
+    store.value.mediaStream = null;
     // Удаляем анализатор из стора
-    analyserNode.value =  null;
+    analyserNode.value = null;
     // Удаляем источник из стора
-    sourceNode.value =  null;
+    store.value.sourceNode =  null;
     // Удаляем контекст из стора
-    audioContext.value =  null;
-  })
-
-  const startPlaying = $(() => {
-    if (!audioPlayer.value) return; 
-    // Меняем статус
-    isPlaying.value =  true
-    // Запускаем плеер
-    audioPlayer.value.play();
-    // Меняем статус по достижении конца трека
-    audioPlayer.value.onended = () => isPlaying.value =  false;
-  });
-
-  /**
-   * Остановить воспроизведение
-   */
-  const stopPlaying = $(() => {
-    if (!audioPlayer.value) return; 
-    // Меняем статус проигрывателя
-    isPlaying.value =  false;
-    // Ставим на паузу
-    audioPlayer.value.pause();
-    // Удаляем обработчик
-    audioPlayer.value.onended = () => isPlaying.value =  false;
+    store.value.audioContext =  null;
   });
 
   useVisibleTask$(({track, cleanup}) => {
@@ -209,13 +266,12 @@ export const useMediaRecorder = (options?: Options): HookReturn => {
     stopRecording,
     clearRecording,
     statusRecording,
-    isPlaying,
-    startPlaying,
-    stopPlaying,
     duration,
     formattedDuration,
     audioBlob,
     analyser: analyserNode,
+    transcript,
+    resetTranscript
   };
 
 }

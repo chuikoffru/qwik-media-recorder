@@ -1,28 +1,31 @@
 import { component$, useVisibleTask$ } from "@builder.io/qwik";
 import { useMediaRecorder } from "../../hooks/useMediaRecorder";
 import { MediaButton } from "../button";
-import { PlayerButton } from "../player";
 
 export const Recorder = component$(() => {
   const {
     startRecording,
     stopRecording,
     statusRecording,
-    startPlaying,
-    stopPlaying,
-    isPlaying,
     clearRecording,
     audioBlob,
     formattedDuration,
     analyser,
-  } = useMediaRecorder();
+    transcript,
+  } = useMediaRecorder({ transcipt: { enable: true }, enableAnalyser: true });
 
   useVisibleTask$(({ track, cleanup }) => {
-    track(() => audioBlob.value);
+    const blob = track(() => audioBlob.value);
 
-    console.log("audioBlob :>> ", audioBlob.value);
+    console.log("audioBlob :>> ", blob);
 
     cleanup(() => clearRecording());
+  });
+
+  useVisibleTask$(({ track }) => {
+    const text = track(() => transcript.value);
+
+    console.log("text :>> ", text);
   });
 
   return (
@@ -33,12 +36,6 @@ export const Recorder = component$(() => {
         onStart={startRecording}
         onStop={stopRecording}
         formattedDuration={formattedDuration}
-      />
-      <PlayerButton
-        onPlay={startPlaying}
-        onStop={stopPlaying}
-        audioBlob={audioBlob}
-        isPlaying={isPlaying}
       />
     </div>
   );

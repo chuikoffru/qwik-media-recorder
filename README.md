@@ -15,14 +15,11 @@ export default component$(() => {
     startRecording,
     stopRecording,
     statusRecording,
-    startPlaying,
-    stopPlaying,
-    isPlaying,
     clearRecording,
     audioBlob,
     formattedDuration,
     analyser,
-  } = useMediaRecorder();
+  } = useMediaRecorder({enableAnalyser: true});
 
   useVisibleTask$(({ track, cleanup }) => {
     track(() => audioBlob.value);
@@ -40,12 +37,6 @@ export default component$(() => {
         onStart={startRecording}
         onStop={stopRecording}
         formattedDuration={formattedDuration}
-      />
-      <PlayerButton
-        onPlay={startPlaying}
-        onStop={stopPlaying}
-        audioBlob={audioBlob}
-        isPlaying={isPlaying}
       />
     </div>
   );
@@ -69,4 +60,35 @@ export const App = component$(() => {
   );
 });
 
+```
+
+# Transcript voice to text (SpeechRecognition)
+```
+export default component$(() => {
+  const {
+    startRecording,
+    stopRecording,
+    statusRecording,
+    transcript,
+    formattedDuration,
+  } = useMediaRecorder({ transcipt: { enable: true }});
+
+  useVisibleTask$(({ track }) => {
+    const text = track(() => transcript.value);
+    console.log("text :>> ", text);
+  });
+
+  return (
+    <div>
+      {transcript.value}
+      <MediaButton
+        status={statusRecording}
+        analyser={analyser}
+        onStart={startRecording}
+        onStop={stopRecording}
+        formattedDuration={formattedDuration}
+      />
+    </div>
+  );
+});
 ```
