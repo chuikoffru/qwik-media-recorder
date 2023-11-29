@@ -1,25 +1,26 @@
 import { component$, useVisibleTask$ } from "@builder.io/qwik";
 import { useMediaRecorder } from "../../hooks/useMediaRecorder";
-import { MediaButton } from "../button";
 
 export const Recorder = component$(() => {
   const {
     startRecording,
     stopRecording,
+    pauseRecording,
+    resumeRecording,
     statusRecording,
     clearRecording,
     audioBlob,
     formattedDuration,
-    analyser,
+    audioUrl,
     transcript,
   } = useMediaRecorder({ transcipt: { enable: true }, enableAnalyser: true });
 
-  useVisibleTask$(({ track, cleanup }) => {
+  useVisibleTask$(({ track }) => {
     const blob = track(() => audioBlob.value);
 
     console.log("audioBlob :>> ", blob);
 
-    cleanup(() => clearRecording());
+    //cleanup(() => clearRecording());
   });
 
   useVisibleTask$(({ track }) => {
@@ -29,14 +30,27 @@ export const Recorder = component$(() => {
   });
 
   return (
-    <div>
-      <MediaButton
-        status={statusRecording}
-        analyser={analyser}
-        onStart={startRecording}
-        onStop={stopRecording}
-        formattedDuration={formattedDuration}
-      />
+    <div style={{ display: "flex", justifyContent: "space-between" }}>
+      {statusRecording.value === "ready" ? (
+        <button onClick$={startRecording}>Start</button>
+      ) : statusRecording.value === "paused" ? (
+        <button onClick$={resumeRecording}>Resume</button>
+      ) : (
+        <button onClick$={pauseRecording}>Pause</button>
+      )}
+
+      {!audioUrl.value ? (
+        <div>{formattedDuration.value}</div>
+      ) : (
+        <audio src={audioUrl.value} controls />
+      )}
+      {statusRecording.value === "stopped" ? (
+        <button onClick$={clearRecording}>Reset</button>
+      ) : (
+        <button onClick$={stopRecording} disabled={statusRecording.value !== "recording"}>
+          Stop
+        </button>
+      )}
     </div>
   );
 });

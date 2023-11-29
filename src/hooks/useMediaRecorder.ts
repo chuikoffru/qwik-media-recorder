@@ -30,10 +30,12 @@ interface SpeechRecognitionEvent extends Event {
   resultIndex: number;
 }
 
-export type RecordingStatus = "ready" | "recording" | "stopped" | "denied";
+export type RecordingStatus = "ready" | "recording" | "paused" | "stopped" | "denied";
 
 type HookReturn = {
   startRecording: QRL<() => Promise<void>>;
+  pauseRecording: QRL<() => void>;
+  resumeRecording: QRL<() => void>;
   stopRecording: QRL<() => void>;
   statusRecording: Signal<RecordingStatus>;
   clearRecording: QRL<() => void>;
@@ -41,6 +43,7 @@ type HookReturn = {
   formattedDuration: Readonly<Signal<string>>;
   analyser: Signal<NoSerialize<AnalyserNode> | null>
   audioBlob: Signal<NoSerialize<Blob> | null>;
+  audioUrl: Signal<string>;
   transcript: Signal<string>;
   resetTranscript: QRL<() => void>;
 };
@@ -81,6 +84,7 @@ export const useMediaRecorder = (options?: Options): HookReturn => {
   const audioBlob = useSignal<NoSerialize<Blob> | null>(null);
   const transcript = useSignal<string>("");
   const analyserNode = useSignal<NoSerialize<AnalyserNode> | null>(null);
+  const chunks = useSignal<NoSerialize<BlobPart>[]>([]);
 
   const formattedDuration = useComputed$(() => {
     const time = new Date();
@@ -89,19 +93,27 @@ export const useMediaRecorder = (options?: Options): HookReturn => {
     return `${("0" + time.getMinutes()).slice(-2)}:${("0" + time.getSeconds()).slice(-2)}`;
   });
 
-  /**
-   * Возвращаем записанные данные, меняем статус и передаем в плеер
-   */
-  const finishRecording = $(({ data }: { data: Blob }) => {
-      // Создаем уникальный url для записи
-      const url = URL.createObjectURL(data);
-      // Меняем статус записи
-      statusRecording.value = "stopped";
-      // Записываем url в хранилище
-      audioUrl.value = url;
-      // Передаем данные в колбэк
-      audioBlob.value = noSerialize(data);
-    })
+  const pauseRecording = $(() => {
+    if (!store.value.mediaRecorder) return;
+    console.log(`pauseRecording`);
+    // Меняем статус
+    statusRecording.value = "paused";
+    // Приостанавливаем запись
+    store.value.mediaRecorder.pause();
+  });
+
+  const resumeRecording = $(() => {
+    if (!store.value.mediaRecorder) return;
+    console.log(`resumeRecording`);
+    // Меняем статус
+    statusRecording.value = "recording";
+    // Возобновляем запись
+    store.value.mediaRecorder.resume();
+  });
+
+  const onDataAvailable = $(({ data }: { data: Blob }) => {
+    chunks.value.push(noSerialize(data));
+  });
 
   /**
    * Статуем запись с микрофона
@@ -117,7 +129,7 @@ export const useMediaRecorder = (options?: Options): HookReturn => {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
       // Передаем стрим в стор
-      store.value.mediaStream =  noSerialize(stream);
+      store.value.mediaStream = noSerialize(stream);
 
       // Создаем аудио контекст, источник и анализатор
       if (options?.enableAnalyser) {
@@ -168,9 +180,9 @@ export const useMediaRecorder = (options?: Options): HookReturn => {
       // Передаем поток в рекордер
       const recorder = new MediaRecorder(stream);
       // Стартуем запись
-      recorder.start();
+      recorder.start(1000);
       // Навешиваем обработчик доступности данных
-      recorder.ondataavailable = finishRecording;
+      recorder.ondataavailable = onDataAvailable;
       // Передаем рекордер в стор
       store.value.mediaRecorder =  noSerialize(recorder);
       // Меняем статус на активный
@@ -191,18 +203,41 @@ export const useMediaRecorder = (options?: Options): HookReturn => {
   const stopRecording = $(() => {
     if (!store.value.mediaRecorder) return;
     console.log(`stopRecording`);
-      // Меняем статус
-      statusRecording.value = "stopped";
-      // Останавливаем запись
-      store.value.mediaRecorder.stop();
-      // Отключаем стрим
-      store.value.mediaStream?.getTracks().forEach((track) => track.stop());
-      // Удаляем стрим из хранилища
-      store.value.mediaStream =  null;
-      // Удаляем анализатор из стора
-      analyserNode.value =  null;
-      // Останавливаем распознавание если оно было
-      store.value.recognizer?.stop();
+    const nonUndefinedChunks = chunks.value.filter(chunk => chunk !== undefined) as BlobPart[];
+
+    if (nonUndefinedChunks.length === 0) {
+      console.error('No valid chunks to combine.');
+      return;
+    }
+    // Создаем уникальный url для записи
+    const data = new Blob(nonUndefinedChunks, { type: "audio/ogg; codecs=opus" });
+    
+    // Создаем уникальный url для записи
+    const url = URL.createObjectURL(data);
+    
+    // Меняем статус записи
+    statusRecording.value = "stopped";
+    
+    // Записываем url в хранилище
+    audioUrl.value = url;
+    
+    // Передаем данные в колбэк
+    audioBlob.value = noSerialize(data);
+    
+    // Останавливаем запись
+    store.value.mediaRecorder.stop();
+    
+    // Отключаем стрим
+    store.value.mediaStream?.getTracks().forEach((track) => track.stop());
+    
+    // Удаляем стрим из хранилища
+    store.value.mediaStream =  null;
+    
+    // Удаляем анализатор из стора
+    analyserNode.value =  null;
+    
+    // Останавливаем распознавание если оно было
+    store.value.recognizer?.stop();
   });
 
   const clearRecording = $(() => {
@@ -213,6 +248,10 @@ export const useMediaRecorder = (options?: Options): HookReturn => {
     duration.value = 0;
     // Чистим url
     audioUrl.value = "";
+    // Чистим транскрипт
+    transcript.value = "";
+    // Чистим чанки
+    chunks.value = [];
     // Удаляем рекордер из стора
     store.value.mediaRecorder = null;
     // Удаляем стрим из хранилища
@@ -263,12 +302,15 @@ export const useMediaRecorder = (options?: Options): HookReturn => {
 
   return {
     startRecording,
+    pauseRecording,
     stopRecording,
+    resumeRecording,
     clearRecording,
     statusRecording,
     duration,
     formattedDuration,
     audioBlob,
+    audioUrl,
     analyser: analyserNode,
     transcript,
     resetTranscript
