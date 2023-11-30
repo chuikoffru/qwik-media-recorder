@@ -219,7 +219,7 @@ export const useMediaRecorder = (options?: Options): HookReturn => {
     const url = URL.createObjectURL(data);
     
     // Меняем статус записи
-    statusRecording.value = "stopped";
+    statusRecording.value = "ready";
     
     // Записываем url в хранилище
     audioUrl.value = url;

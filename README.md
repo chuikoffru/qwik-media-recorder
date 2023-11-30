@@ -17,17 +17,31 @@ export default component$(() => {
     pauseRecording,
     resumeRecording,
     statusRecording,
+    getPreview,
     clearRecording,
     audioBlob,
     formattedDuration,
     audioUrl,
   } = useMediaRecorder();
 
+  const { play, isPlaying, stop, load } = useSound(audioUrl.value);
+
   useVisibleTask$(({ track, cleanup }) => {
     track(() => audioBlob.value);
 
     console.log("audioBlob :>> ", audioBlob.value);
 
+  });
+
+  const preview = $(async () => {
+    if (isPlaying.value) {
+      stop();
+      return;
+    }
+    const blob = await getPreview();
+    const url = URL.createObjectURL(blob);
+    load(url);
+    play();
   });
 
   return (
@@ -40,15 +54,17 @@ export default component$(() => {
         <button onClick$={pauseRecording}>Pause</button>
       )}
 
-      {!audioUrl.value ? (
-        <div>{formattedDuration.value}</div>
-      ) : (
-        <audio src={audioUrl.value} controls />
-      )}
-      {statusRecording.value === "stopped" ? (
+      <div>
+        {formattedDuration.value}{" "}
+        <button disabled={statusRecording.value !== "paused"} onClick$={preview}>
+          {isPlaying.value ? "Pause" : "Play"}
+        </button>
+      </div>
+
+      {statusRecording.value === "ready" && audioUrl.value ? (
         <button onClick$={clearRecording}>Reset</button>
       ) : (
-        <button onClick$={stopRecording} disabled={statusRecording.value !== "recording"}>
+        <button onClick$={stopRecording} disabled={statusRecording.value === "ready"}>
           Stop
         </button>
       )}
