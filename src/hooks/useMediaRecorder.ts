@@ -36,6 +36,7 @@ type HookReturn = {
   startRecording: QRL<() => Promise<void>>;
   pauseRecording: QRL<() => void>;
   resumeRecording: QRL<() => void>;
+  getPreview: QRL<() => Blob>;
   stopRecording: QRL<() => void>;
   statusRecording: Signal<RecordingStatus>;
   clearRecording: QRL<() => void>;
@@ -198,19 +199,21 @@ export const useMediaRecorder = (options?: Options): HookReturn => {
   });
 
   /**
+   * Получаем предваарительное состояние записи
+   */
+  const getPreview = $(() => {
+    return new Blob(chunks.value as BlobPart[], { type: "audio/ogg; codecs=opus" });    
+  })
+
+  /**
    * Остановить запись
    */
-  const stopRecording = $(() => {
+  const stopRecording = $(async () => {
     if (!store.value.mediaRecorder) return;
     console.log(`stopRecording`);
-    const nonUndefinedChunks = chunks.value.filter(chunk => chunk !== undefined) as BlobPart[];
-
-    if (nonUndefinedChunks.length === 0) {
-      console.error('No valid chunks to combine.');
-      return;
-    }
+    
     // Создаем уникальный url для записи
-    const data = new Blob(nonUndefinedChunks, { type: "audio/ogg; codecs=opus" });
+    const data = await getPreview();
     
     // Создаем уникальный url для записи
     const url = URL.createObjectURL(data);
@@ -305,6 +308,7 @@ export const useMediaRecorder = (options?: Options): HookReturn => {
     pauseRecording,
     stopRecording,
     resumeRecording,
+    getPreview,
     clearRecording,
     statusRecording,
     duration,
